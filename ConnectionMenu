@@ -1,0 +1,827 @@
+#!/bin/bash
+
+#==================================================>>>>>>>>>>>>>>>>>>>>>>> CONNECT TO DB <<<<<<<<<<<<<<<<<<<<<<<<=================================
+echo ""
+read -p "---Enter Database name to connect to: " DB_CONNECT
+echo ""
+if [[ ! "$DB_CONNECT" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+	echo ""
+	echo "Please enter a valid DataBase name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+	echo "Press (Enter)"
+	echo ""
+else
+	if [[ ! -d /DataBases/$DB_CONNECT ]]; then
+		echo ""
+		echo "DataBase doesn't exists..."
+		echo "Press (Enter)"
+		echo ""
+	else
+		cd /DataBases/$DB_CONNECT
+		echo "***You are using Database: "$DB_CONNECT
+		echo ""
+
+		Prim_Key_Flag=false
+
+		#===================================>>>>>>>>>>>>> MAIN SELECT <<<<<<<<<<<<=================================================================
+		while true; do
+
+			select Connect_Choice in InsertInto_Table SelectFrom_Table DeleteFrom_Table UpdateTo_Table Create_Table List_Tables Drop_Table Back; do
+
+				case $Connect_Choice in
+				#=============================== INSERTION======================================================
+				InsertInto_Table)
+					echo ""
+					read -p "---Enter Table name to insert into: " INSERT_INTO_TABLE_NAME
+					echo ""
+
+					#=========== name check
+					if [[ ! "$INSERT_INTO_TABLE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+						echo ""
+						echo "Please enter a valid Table name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+						echo ""
+					else
+						if [[ ! -f /DataBases/$DB_CONNECT/$INSERT_INTO_TABLE_NAME ]]; then
+							echo ""
+							echo "Table doesn't exists. Check table name..."
+							echo ""
+						else
+							#================ get no. of rows
+							NO_ROWS=$(awk -F':' 'BEGIN{
+								NO_ROWS = 0
+								}
+								{
+								NO_ROWS = NO_ROWS + 1
+								
+								}
+								END {print NO_ROWS}' "$INSERT_INTO_TABLE_NAME"_meta)
+
+							sent=""
+							regx=""
+
+							#=============== start insterting here
+							for ((i = 1; i <= $NO_ROWS; i++)); do
+
+								awk -v j=$i -F':' '{
+										if (j == NR) {
+										print "Enter",$1,"as",$2,"  ",$3
+										}
+									}' "$INSERT_INTO_TABLE_NAME"_meta
+
+								#=================== get the data type
+								DataType=$(awk -v j=$i -F':' 'BEGIN{
+										DataType = ""
+										}
+										{
+										if (j == NR) {
+										DataType = $2
+										}
+									}
+									END {print DataType}' "$INSERT_INTO_TABLE_NAME"_meta)
+
+								#================== get if the column is primary
+								Primary_Check=$(awk -v j=$i -F':' 'BEGIN{
+										Primary_Check = ""
+										}
+										{
+										if (j == NR) {
+										Primary_Check = $3
+										}
+									}
+									END {print Primary_Check}' "$INSERT_INTO_TABLE_NAME"_meta)
+
+								#================== check for datatype and primary insrertion
+								if [[ "$DataType" == "string" ]]; then
+									regx=""
+								else
+									regx=^[0-9]*$
+								fi
+
+								isExist="false"
+								if [[ $Primary_Check == "primary" ]]; then
+									data=""
+									while [[ $data == "" || ! $data =~ $regx || $isExist == "true" ]]; do
+										echo ""
+										echo "This is primary field .. You must Enter Valid data..."
+										read -p "--- : " data
+										echo ""
+
+										isExist=$(awk -v prim=$data -v h=$i -F':' 'BEGIN{isExist=""}
+										{
+											if ($h == prim){
+												isExist="true"
+												exit
+												}
+											else
+												isExist="false"
+										}
+										END {print isExist}' "$INSERT_INTO_TABLE_NAME")
+
+										if [[ $isExist == "true" ]]; then
+											echo ""
+											echo "Duplicated primary key !!!"
+											echo ""
+										fi
+
+									done
+
+								else
+
+									#====================== insert the rest of data
+									read -p "--- : " data
+									echo ""
+									if [[ $data == "" ]]; then
+										data="NULL"
+									fi
+								fi
+
+								if [[ $data =~ $regx ]]; then
+									if ((i == 1)); then
+										sent="$data"
+									else
+										sent="$sent":"$data"
+									fi
+								else
+									while [[ ! $data =~ $regx && $data != "NULL" ]]; do
+										echo ""
+										echo "Invalid data type..."
+										read -p "--- : " data
+										if [[ $data == "" ]]; then
+											data="NULL"
+										fi
+									done
+									if ((i == 1)); then
+										sent="$data"
+									else
+										sent="$sent":"$data"
+									fi
+								fi
+
+							done
+							#==================== send to table
+							echo $sent >>$INSERT_INTO_TABLE_NAME
+						fi
+						break
+
+					fi
+					break
+					;;
+
+				#=============================== SELECTION ================================================================================================
+				SelectFrom_Table)
+					echo ""
+					read -p "---Enter Table name to Select from: " SELECT_FROM_TABLE_NAME
+					echo ""
+
+					#================= check for name validation
+					if [[ ! "$SELECT_FROM_TABLE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+						echo ""
+						echo "Please enter a valid Table name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+						echo ""
+					else
+						if [[ ! -f /DataBases/$DB_CONNECT/$SELECT_FROM_TABLE_NAME ]]; then
+							echo ""
+							echo "Table doesn't exists. Check table name..."
+							echo ""
+						else
+
+							#======================== insertion cases ========================
+							while true; do
+								select Select_Choice in Select_All Select_Entire_Record Select_Specific_data Back; do
+
+									case $Select_Choice in
+
+									#==================================================================== select all
+									Select_All)
+										echo ""
+										sudo cat $SELECT_FROM_TABLE_NAME
+										echo ""
+
+										break
+										;;
+
+									# ===================================================================== Sekect entire record
+									Select_Entire_Record)
+										is_col_exist="false"
+
+										echo ""
+										read -p "--- Enter Column name as Selection Parameter: " SELECTION_COLUMN_NAME
+										echo ""
+
+										#======================== check for column existance
+										is_col_exist=$(awk -v column=$SELECTION_COLUMN_NAME -F':' 'BEGIN{isExist=""}
+										{
+											if (column == $1){
+												isExist="true"
+												exit
+												}
+											else
+												isExist="false"
+										}
+										END {print isExist}' "$SELECT_FROM_TABLE_NAME"_meta)
+
+										#======================== get the column number to look in
+										if [[ $is_col_exist == "true" ]]; then
+											col_number=$(awk -v column=$SELECTION_COLUMN_NAME -F':' 'BEGIN{col_number=""}
+											{
+												if (column == $1){
+													col_number=NR
+													exit
+													}
+											}
+											END {print col_number}' "$SELECT_FROM_TABLE_NAME"_meta)
+
+											#========================= looking for the condition in the column
+											echo ""
+											read -p "--- Enter your selection condition: " SELECTION_CONDITION
+											echo ""
+
+											awk -v condition=$SELECTION_CONDITION -v col_no=$col_number -F':' 'BEGIN{error="false"}
+											{
+												if ($col_no == condition)
+												{
+													print $0
+													error="true"																										
+												}									
+											}
+											END{if (error == "false")
+													print "*****No data exist.*****"}' "$SELECT_FROM_TABLE_NAME"
+											echo ""
+
+										else
+											echo ""
+											echo "Column doesn't exist. Check again..."
+											echo ""
+										fi
+
+										break
+										;;
+
+									#========================================================= select specific data
+									Select_Specific_data)
+										is_search_col_exist="false"
+										is_col_exist="false"
+
+										#=============== what are you lookinf for
+										echo ""
+										read -p "--- Enter the Column you're searching for: " SEARCHING_COLUMN_NAME
+										echo ""
+										is_search_col_exist=$(awk -v column=$SEARCHING_COLUMN_NAME -F':' 'BEGIN{isExist=""}
+										{
+											if (column == $1){
+												isExist="true"
+												exit
+												}
+											else
+												isExist="false"
+										}
+										END {print isExist}' "$SELECT_FROM_TABLE_NAME"_meta)
+
+										if [[ $is_search_col_exist == "true" ]]; then
+
+											#================== number of the column youre looking for
+											search_col_number=$(awk -v column=$SEARCHING_COLUMN_NAME -F':' 'BEGIN{col_number=""}
+												{
+													if (column == $1){
+														col_number=NR
+														exit
+														}
+												}
+												END {print col_number}' "$SELECT_FROM_TABLE_NAME"_meta)
+
+											#================= column parameter youre searching in
+											read -p "--- Enter Column name as Selection Parameter: " SELECTION_COLUMN_NAME
+											echo ""
+											is_col_exist=$(awk -v column=$SELECTION_COLUMN_NAME -F':' 'BEGIN{isExist=""}
+											{
+												if (column == $1){
+													isExist="true"
+													exit
+													}
+												else
+													isExist="false"
+											}
+											END {print isExist}' "$SELECT_FROM_TABLE_NAME"_meta)
+
+											#================= number of column parameter youre searching in
+											if [[ $is_col_exist == "true" ]]; then
+												col_number=$(awk -v column=$SELECTION_COLUMN_NAME -F':' 'BEGIN{col_number=""}
+												{
+													if (column == $1){
+														col_number=NR
+														exit
+														}
+												}
+												END {print col_number}' "$SELECT_FROM_TABLE_NAME"_meta)
+												read -p "--- Enter your selection condition: " SELECTION_CONDITION
+												echo ""
+
+												#================== getting the result
+												awk -v condition=$SELECTION_CONDITION -v col_no=$col_number -v search_col_number=$search_col_number -F':' 'BEGIN{error="false"}
+												{
+													if ($col_no == condition)
+													{
+														print $search_col_number
+														error="true"																										
+													}									
+												}
+												END{if (error == "false")
+														print "*****No data exist.*****"}' "$SELECT_FROM_TABLE_NAME"
+												echo ""
+
+											else
+												echo ""
+												echo "Column doesn't exist. Check again"
+												echo ""
+											fi
+
+										else
+											echo ""
+											echo "Column doesn't exist. Check again"
+											echo ""
+										fi
+
+										break
+										;;
+
+									Back)
+										echo ""
+										break 2
+										;;
+									esac
+								done
+							done
+						fi
+
+					fi
+
+					break
+					;;
+
+				#======================================================================================== DELETION
+				DeleteFrom_Table)
+					echo ""
+					select Delete_Choice in Truncate_table Delete_from_table Back; do
+
+						case $Delete_Choice in
+
+						#======================================= truncation
+						Truncate_table)
+							echo ""
+							read -p "---Enter Table name to Truncate: " TABLE_NAME
+							echo ""
+
+							#============ check for table name
+							if [[ ! "$TABLE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+								echo ""
+								echo "Please enter a valid Table name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+								echo ""
+							else
+								if [[ ! -f /DataBases/$DB_CONNECT/$TABLE_NAME ]]; then
+									echo ""
+									echo "Table doesn't exist. Check again ... "
+									echo ""
+								else
+									#============ truncating
+									echo ""
+									sudo echo "" >$TABLE_NAME
+									echo "Table Trancated successfully.."
+									echo ""
+								fi
+							fi
+
+							break
+							;;
+
+						#==================================================== delete from table
+						Delete_from_table)
+							echo ""
+							read -p "---Enter Table name to Delete from: " DELETE_FROM_TABLE_NAME
+							echo ""
+
+							#============ check for table name
+							if [[ ! "$DELETE_FROM_TABLE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+								echo ""
+								echo "Please enter a valid Table name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+								echo ""
+							else
+								if [[ ! -f /DataBases/$DB_CONNECT/$DELETE_FROM_TABLE_NAME ]]; then
+									echo ""
+									echo "Table doesn't exist. Check again ... "
+									echo ""
+								else
+									is_col_exist="false"
+									echo ""
+									read -p "--- Enter Column name as Selection Parameter: " SELECTION_COLUMN_NAME
+									echo ""
+									#======================== check for column existance
+									is_col_exist=$(awk -v column=$SELECTION_COLUMN_NAME -F':' 'BEGIN{isExist=""}
+									{
+										if (column == $1){
+											isExist="true"
+											exit
+											}
+										else
+											isExist="false"
+									}
+									END {print isExist}' "$DELETE_FROM_TABLE_NAME"_meta)
+
+									#======================== get the column number to look in
+									if [[ $is_col_exist == "true" ]]; then
+										col_number=$(awk -v column=$SELECTION_COLUMN_NAME -F':' 'BEGIN{col_number=""}
+										{
+											if (column == $1){
+												col_number=NR
+												exit
+												}
+										}
+										END {print col_number}' "$DELETE_FROM_TABLE_NAME"_meta)
+
+										#============================ get column datatype
+										col_datatype=$(awk -v column=$SELECTION_COLUMN_NAME -F':' 'BEGIN{datatype=""}
+										{
+											if (column == $1){
+												datatype=$2
+												exit
+												}
+										}
+										END {print datatype}' "$DELETE_FROM_TABLE_NAME"_meta)
+
+										#========================= looking for the condition in the column
+										read -p "--- Enter your selection condition: " SELECTION_CONDITION
+										echo ""
+
+										#============================== checking for value datatype
+										if [[ "$col_datatype" == "string" ]]; then
+											regx=""
+										else
+											regx=^[0-9]*$
+										fi
+
+										while [[ ! $SELECTION_CONDITION =~ $regx && $SELECTION_CONDITION != "NULL" ]]; do
+											echo ""
+											echo "Invalid data type."
+											read -p "--- Enter your selection condition: " SELECTION_CONDITION
+											echo ""
+											if [[ $SELECTION_CONDITION == "" ]]; then
+												SELECTION_CONDITION="NULL"
+											fi
+										done
+
+										#======================== Deleting process
+										sudo awk -i inplace -v condition=$SELECTION_CONDITION -v col_no=$col_number -F':' '
+										{
+											if ($col_no != condition)
+											{
+												{print}																									
+											}
+										}									
+										' "$DELETE_FROM_TABLE_NAME"
+
+									else
+										echo ""
+										echo "Column doesn't exist. Check again..."
+										echo ""
+									fi
+								fi
+							fi
+
+							break
+							;;
+
+						Back)
+							echo ""
+							break 2
+							;;
+						esac
+
+					done
+
+					break
+					;;
+
+				#=============================== UPDATING=====================================================================
+				UpdateTo_Table)
+					echo ""
+					read -p "---Enter Table name to Upadte to: " UPADTETO_TABLE_NAME
+					echo ""
+					if [[ ! "$UPADTETO_TABLE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+						echo ""
+						echo "Please enter a valid Table name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+						echo ""
+					else
+						if [[ ! -f /DataBases/$DB_CONNECT/$UPADTETO_TABLE_NAME ]]; then
+							echo ""
+							echo "Table doesn't exist. Check again..."
+							echo ""
+						else
+
+							is_col_exist="false"
+							echo ""
+							read -p "--- Enter Column name as condition parameter: " CONDITION_COLUMN_NAME
+							echo ""
+							#======================== check for condition column existance
+							is_col_exist=$(awk -v column=$CONDITION_COLUMN_NAME -F':' 'BEGIN{isExist=""}
+							{
+								if (column == $1){
+									isExist="true"
+									exit
+									}
+								else
+									isExist="false"
+							}
+							END {print isExist}' "$UPADTETO_TABLE_NAME"_meta)
+
+							if [[ $is_col_exist == "true" ]]; then
+								#======================== get the condition column number
+								cond_col_number=$(awk -v column=$CONDITION_COLUMN_NAME -F':' 'BEGIN{cond_col_number=""}
+								{
+									if (column == $1){
+										cond_col_number=NR
+										exit
+										}
+								}
+								END {print cond_col_number}' "$UPADTETO_TABLE_NAME"_meta)
+
+								#========================= get th condition column datatype
+								cond_col_datatype=$(awk -v column=$CONDITION_COLUMN_NAME -F':' 'BEGIN{datatype=""}
+								{
+									if (column == $1){
+										datatype=$2
+										exit
+										}
+								}
+								END {print datatype}' "$UPADTETO_TABLE_NAME"_meta)
+
+								#========================= getting the condition value
+								echo ""
+								read -p "--- Enter your condition value: " CONDITION_VALUE
+								echo ""
+
+								#========================= checking for condition value datatype
+								if [[ "$cond_col_datatype" == "string" ]]; then
+									cond_regx=""
+								else
+									cond_regx=^[0-9]*$
+								fi
+
+								while [[ ! $CONDITION_VALUE =~ $cond_regx && $CONDITION_VALUE != "NULL" ]]; do
+									echo ""
+									echo "Invalid data type..."
+									read -p "--- Enter your condition value: " CONDITION_VALUE
+									echo ""
+									if [[ $CONDITION_VALUE == "" ]]; then
+										CONDITION_VALUE="NULL"
+									fi
+								done
+
+								#========================= getting the column to update to
+								echo ""
+								read -p "--- Enter the column to update to: " UPDATETO_COLUMN
+								echo ""
+
+								#======================== check for target column existance
+								is_target_col_exist=$(awk -v column=$UPDATETO_COLUMN -F':' 'BEGIN{isExist=""}
+								{
+									if (column == $1){
+										isExist="true"
+										exit
+										}
+									else
+										isExist="false"
+								}
+								END {print isExist}' "$UPADTETO_TABLE_NAME"_meta)
+
+								if [[ $is_target_col_exist == "true" ]]; then
+
+									#======================== check if target column is primary
+									target_col_primary=$(awk -v column=$UPDATETO_COLUMN -F':' 'BEGIN{primary=""}
+									{
+										if (column == $1){
+											primary=$3
+											exit
+											}
+										else
+											primary=""
+									}
+									END {if (primary == "")
+											{print "false"}
+											else
+											{print "true"}}' "$UPADTETO_TABLE_NAME"_meta)
+
+									if [[ $target_col_primary == "true" ]]; then
+										echo ""
+										echo "You can NOT update a primary column !!!"
+										echo ""
+									else
+
+										#================================ get target column number
+										target_col_number=$(awk -v column=$UPDATETO_COLUMN -F':' 'BEGIN{cond_col_number=""}
+										{
+											if (column == $1){
+												cond_col_number=NR
+												exit
+												}
+										}
+										END {print cond_col_number}' "$UPADTETO_TABLE_NAME"_meta)
+
+										#=============================== check for target column datatype
+
+										target_col_datatype=$(awk -v column=$UPDATETO_COLUMN -F':' 'BEGIN{datatype=""}
+										{
+											if (column == $1){
+												datatype=$2
+												exit
+												}
+										}
+										END {print datatype}' "$UPADTETO_TABLE_NAME"_meta)
+
+										#============================== getting the new value
+										echo ""
+										read -p "--- Enter your new value: " NEW_VALUE
+										echo ""
+
+										#============================== checking for the new value datatype
+										if [[ "$target_col_datatype" == "string" ]]; then
+											regx=""
+										else
+											regx=^[0-9]*$
+										fi
+
+										while [[ ! $NEW_VALUE =~ $regx && $NEW_VALUE != "NULL" ]]; do
+											echo ""
+											echo "Invalid data type..."
+											read -p "--- Enter your new value: " NEW_VALUE
+											echo ""
+											if [[ $NEW_VALUE == "" ]]; then
+												NEW_VALUE="NULL"
+											fi
+										done
+
+									fi
+
+									# #======================== Updating process
+									sudo awk -i inplace -v condition_col=$cond_col_number -v condition_val=$CONDITION_VALUE -v target_col=$target_col_number -v target_val=$NEW_VALUE -F':' '
+									{
+										if ($condition_col == condition_val)
+										{
+
+											gsub($target_col,target_val,$0)
+											print
+
+										}
+										else 
+										{
+											print $0
+										}
+									}
+									' "$UPADTETO_TABLE_NAME"
+								else
+									echo ""
+									echo "Column doesn't exist. Check again..."
+									echo ""
+								fi
+
+							else
+								echo ""
+								echo "Column doesn't exist. Check again..."
+								echo ""
+							fi
+
+						fi
+
+					fi
+
+					break
+					;;
+
+				#=============================== CREATION ====================================================================
+				Create_Table)
+					#=====================getting table name
+					echo ""
+					read -p "---Enter Table name to create: " TABLE_NAME
+					echo ""
+
+					#================ name validation
+					if [[ ! "$TABLE_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+						echo ""
+						echo "Please enter a valid Table name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+						echo ""
+					else
+						if [ -f /DataBases/$DB_CONNECT/$TABLE_NAME ]; then
+							echo ""
+							echo "Table already exists..."
+							echo ""
+						else
+
+							#=============== getting number of fields and validate it
+							echo ""
+							read -p "---Enter number of fields: " NO_FIELDS
+							echo ""
+
+							for ((i = 1; i <= $NO_FIELDS; i++)); do
+								Prim_Key=""
+								echo ""
+								read -p "---Enter column #$i name: " COL_NAME
+								echo ""
+								select Data_Type in String Integer; do
+									case $Data_Type in
+									String)
+										DataType=string
+										break 1
+										;;
+									Integer)
+										DataType=integer
+										break 1
+										;;
+									esac
+								done
+								echo ""
+
+								#================ checking for primary
+								if [ "$Prim_Key_Flag" = false ]; then
+									echo ""
+									read -p "---Set as 'primary key'? (y/n): " PRIM_CHOICE
+									echo ""
+									while [[ "$PRIM_CHOICE" != y && "$PRIM_CHOICE" != n ]]; do
+										echo ""
+										read -p "---Set as 'primary key'? (y/n): " PRIM_CHOICE
+										echo ""
+									done
+									if [ "$PRIM_CHOICE" = y ]; then
+										Prim_Key_Flag=true
+										Prim_Key=primary
+
+									fi
+								fi
+								echo ""
+
+								#================ creating table and meta data
+								sudo touch $TABLE_NAME /DataBases/$DB_CONNECT/
+								sudo chmod 777 /DataBases/$DB_CONNECT/$TABLE_NAME
+								sudo touch "$TABLE_NAME"_meta /DataBases/$DB_CONNECT/
+								sudo chmod 777 /DataBases/$DB_CONNECT/"$TABLE_NAME"_meta
+
+								#================ sending data
+								sudo echo "$COL_NAME":"$DataType":"$Prim_Key" >>/DataBases/$DB_CONNECT/"$TABLE_NAME"_meta
+							done
+						fi
+					fi
+					break
+					;;
+
+				#==================================== LISTING
+				####################<<<<<<<<<<<<<<<<<<<<<<< add to check for dirs >>>>>>>>>>>>>>>>############################
+				List_Tables)
+					echo ""
+					if [ "$(ls $DIR)" ]; then
+						echo ""
+						find . -maxdepth 1 -type f | grep -v '_meta'
+						echo ""
+					else
+						echo ""
+						echo "No tables exsits..."
+						echo ""
+					fi
+					break
+					;;
+
+				#=================================== DROPPING
+				Drop_Table)
+					echo ""
+					read -p "---Enter Table name to drop: " TABLE_DROP
+					echo ""
+					if [[ ! "$TABLE_DROP" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+						echo ""
+						echo "Please enter a valid Table name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+						echo ""
+					else
+						if [[ $TABLE_DROP =~ .+\_meta$ ]]; then
+
+							echo ""
+							echo "You Can NOT delete the meta file !!! "
+							echo ""
+						elif [[ ! -f /DataBases/$DB_CONNECT/$TABLE_DROP ]]; then
+							echo ""
+							echo "Table doesn't exists. Check table name ... "
+							echo ""
+						else
+							sudo rm /DataBases/$DB_CONNECT/$TABLE_DROP
+							sudo rm /DataBases/$DB_CONNECT/"$TABLE_DROP"_meta
+							echo ""
+							echo "Table has been dropped successfully... "
+							echo ""
+						fi
+					fi
+					break
+					;;
+
+				Back)
+					echo ""
+					. MainMenu
+					;;
+
+				esac
+			done
+		done
+	fi
+fi

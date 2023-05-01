@@ -1,0 +1,101 @@
+#!/bin/bash
+
+#=========================================== ENTRY ==================================
+echo ""
+echo ">>>>>>>> Welcome To Bash DataBase <<<<<<<<"
+echo ""
+
+#=====================================check for dadabases dir.
+if [ -d /DataBases ]; then
+	cd /DataBases
+
+	echo "***Connected to DataBases***"
+	echo ""
+else
+	sudo mkdir /DataBases
+	cd /DataBases
+	echo "***DataBases Created***"
+	echo ""
+fi
+
+#=========================================== MAIN MENU ===============================
+while true; do
+	#----- MAIN SELECT
+	select Entry_Choice in Create_DB List_DB ConnectTo_DB Drop_DB; do
+
+		case $Entry_Choice in
+
+		#======================== CREATION
+		Create_DB)
+			echo ""
+			read -p "--- Enter Database name to create: " DB_NAME
+			echo ""
+
+			#==================== check for valid name
+			if [[ ! "$DB_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+				echo ""
+				echo "Please enter a valid DataBase name. Begin with an alphapet or _, the rest can contains numbers or @#_$ only"
+				echo ""
+			else
+
+				if [ -d /DataBases/$DB_NAME ]; then
+					echo ""
+					echo "DataBase already exists, Connect to it..."
+					echo ""
+				else
+					sudo mkdir -p $DB_NAME /DataBases/
+					echo ""
+					echo "$DB_NAME "craeted successfully ...
+					echo ""
+				fi
+			fi
+			break
+			;;
+
+		#====================== LISTING
+		List_DB)
+			if [ "$(ls $DIR)" ]; then
+				echo ""
+				ls -F | grep /
+				echo ""
+			else
+				echo ""
+				echo "No Databases found..."
+				echo ""
+			fi
+			break
+			;;
+
+		#====================== CONNECTING
+		ConnectTo_DB)
+			. ConnectionMenu
+			;;
+
+		#======================= DROPPING
+		Drop_DB)
+			echo ""
+			read -p "--- Enter Database name to drop: " DB_DROP
+			echo ""
+
+			if [[ ! "$DB_DROP" =~ ^[a-zA-Z_][a-zA-Z0-9@$#_]{0,127}$ ]]; then
+				echo ""
+				echo "Please enter a valid DataBase name. Begin with an alphapet or _, the rest can contains numbers or (@#$_)"
+				echo ""
+			else
+				if [[ ! -d /DataBases/$DB_DROP ]]; then
+					echo ""
+					echo "DataBase doesn't exists. Check again ..."
+					echo ""
+				else
+					sudo rm -r /DataBases/$DB_DROP
+					echo ""
+					echo "DataBase dropped successfully..."
+					echo ""
+				fi
+			fi
+			break
+			;;
+
+		esac
+	done
+done
